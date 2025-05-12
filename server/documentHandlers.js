@@ -21,7 +21,9 @@ async function logReplication(documentId) {
 async function saveDocument(documentId, content, title = '') {
   try {
     let doc = await Document.findOne({ documentId });
+    
     if (!doc) {
+      // Create new document with initial history
       doc = new Document({ 
         documentId, 
         content,
@@ -34,17 +36,29 @@ async function saveDocument(documentId, content, title = '') {
         }]
       });
     } else {
-      const newVersion = doc.version + 1;
+      // Update existing document
+      const newVersion = (doc.version || 0) + 1;
+      
+      // Ensure history array exists
+      if (!Array.isArray(doc.history)) {
+        doc.history = [];
+      }
+      
+      // Update document fields
       doc.content = content;
       doc.title = title || doc.title;
       doc.version = newVersion;
       doc.updatedAt = Date.now();
+      
+      // Add new version to history
       doc.history.push({
         content,
         timestamp: Date.now(),
         version: newVersion
       });
     }
+
+    // Save the document
     await doc.save();
     console.log(`Document ${documentId} saved to MongoDB.`);
     await logReplication(documentId);
@@ -62,7 +76,7 @@ async function loadDocument(documentId, version = null) {
       return { success: false, error: 'Document not found' };
     }
     
-    if (version && doc.history) {
+    if (version && Array.isArray(doc.history)) {
       const versionDoc = doc.history.find(h => h.version === version);
       if (versionDoc) {
         return { 
